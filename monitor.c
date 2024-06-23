@@ -13,6 +13,113 @@
 #define MAX_BUFFER_SIZE 1024
 #define PORT 8080
 #define USERS_CSV_PATH "/home/mken/SISOPraktikum/DiscordIT/DiscorIT/users.csv"
+#define CHANNEL_CSV_PATH "/home/mken/SISOPraktikum/DiscordIT/DiscorIT/channels.csv"
+#define BCRYPT_HASHSIZE 128
+
+void write_channel_csv(int id_channel, const char *channel, const char *key) {
+    FILE *file_ptr = fopen(CHANNEL_CSV_PATH, "a");
+    if (file_ptr == NULL) {
+        perror("Failed to open channels.csv");
+        return;
+    }
+    fprintf(file_ptr, "%d,%s,%s\n", id_channel, channel, key);
+    fclose(file_ptr);
+}
+
+int get_id(const char *path) {
+    FILE *file_ptr = fopen(path, "r");
+    if (file_ptr == NULL) {
+        return 1;
+    }
+    char line[256];
+    int last_id = 0;
+    while (fgets(line, sizeof(line), file_ptr)) {
+        sscanf(line, "%d", &last_id);
+    }
+    fclose(file_ptr);
+    return last_id + 1;
+}
+
+
+void create_channel(const char *channel_name, const char *channel_key, const char *creator) {
+    char channel_path[1024];
+    char auth[1060];
+    snprintf(channel_path, sizeof(channel_path), "/home/mken/SISOPraktikum/DiscordIT/DiscorIT/%s", channel_name);
+    if (mkdir(channel_path, 0777) == -1) {
+        perror("Failed to create channel directory");
+        return;
+    }
+
+    char admin_folder[1050];
+    snprintf(admin_folder, sizeof(admin_folder), "%s/admin", channel_path);
+    if (mkdir(admin_folder, 0777) == -1) {
+        perror("Failed to create channel directory");
+        return;
+    }
+
+    int next_id = get_id(CHANNEL_CSV_PATH);
+    write_channel_csv(next_id, channel_name, channel_key);
+
+    sprintf(auth, "%s/auth.csv", admin_folder);
+    FILE* file_ptr = fopen(auth, "r");
+    if (file_ptr == NULL) {
+        file_ptr = fopen(auth, "w");
+
+        if (file_ptr == NULL) {
+            perror("Failed to create auth.csv");
+            return;
+        }
+        int auth_id = get_id(auth);
+        fprintf(file_ptr, "%d,%s,%s\n", auth_id, creator, "ROOT");
+
+    } 
+    else {
+        fclose(file_ptr);
+        file_ptr = fopen(auth, "a");
+
+        if (file_ptr == NULL) {
+            perror("Failed to open auth.csv for appending");
+            return;
+        }
+
+        int auth_id = get_id(auth);
+        fprintf(file_ptr, "%d,%s,%s\n", auth_id, creator, "ADMIN");
+
+    }
+    
+    fclose(file_ptr);
+
+    printf("Channel %s created with ID %d\n", channel_name, next_id);
+}
+
+void create_room(const char *channel_name, const char *room_name) {
+    char room_path[2048];
+    char chat[2060];
+    snprintf(room_path, sizeof(room_path), "/home/mken/SISOPraktikum/DiscordIT/DiscorIT/%s/%s", channel_name, room_name);
+    if (mkdir(room_path, 0777) == -1) {
+        perror("Failed to create room directory");
+        return;
+    }
+
+    sprintf(chat, "%s/chat.csv", room_path);
+    FILE* file_ptr = fopen(chat, "r");
+    if (file_ptr == NULL) {
+        file_ptr = fopen(chat, "w");
+
+        if (file_ptr == NULL) {
+            perror("Failed to create auth.csv");
+            return;
+        }
+    } 
+    else {
+        fclose(file_ptr);
+        file_ptr = fopen(chat, "a");
+        if (file_ptr == NULL) {
+            perror("Failed to open chat.csv for appending");
+            return;
+        }
+    }
+}
 
 void penuliscsv(int lastid, const char *nama, const char *pass, const char *role, const char *path) {
     FILE* file_ptr = fopen(path, "a");
@@ -122,6 +229,18 @@ void list_directory(const char *path, char *output_buffer) {
     closedir(dp);
 }
 
+void checker(const char *path) {
+    FILE *file_ptr = fopen(path, "r");
+    if (file_ptr == NULL) {
+        file_ptr = fopen(path, "w");
+        if (file_ptr == NULL) {
+            perror("Failed to create file");
+            return;
+        }
+    }
+    fclose(file_ptr);
+}
+
 void daemonize() {
     pid_t pid;
 
@@ -145,6 +264,7 @@ void daemonize() {
     close(STDOUT_FILENO);
     close(STDERR_FILENO);
 }
+
 
 int main() {
     int server_fd, new_socket;
@@ -174,17 +294,20 @@ int main() {
         printf("Server started, waiting for connections...\n");
     }
 
+    daemonize();
+
     while (1) {
         if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0) {
             perror("Accept failed");
             continue;
         }
 
-        char result[1060];
+        char result[3000];
         char nama[1024];
         char jenis[1024];
         char pass[1040];
         char Lokasi[1024] = "";
+        char room[2048] = "";
 
         terima(new_socket, buffer, jenis);
 
@@ -215,10 +338,12 @@ int main() {
             }
         } 
         else if (strcmp("LOGIN", jenis) == 0) {
+
             terima(new_socket, buffer, nama);
             int ada = ganda(nama);
             terima(new_socket, buffer, pass);
             int passada = ganda(pass);
+
             if (ada == 0) {
                 snprintf(result, sizeof(result), "Akun tidak ditemukan");
             } 
@@ -240,47 +365,110 @@ int main() {
                         list_directory("/home/mken/SISOPraktikum/DiscordIT/DiscorIT", result);
                         send(new_socket, result, strlen(result), 0);
                     } 
+
                     else if (strcmp(jenis, "LIST ROOM") == 0) {
-                        if (strlen(Lokasi) > 0) {
-                            char room_path[1070];
-                            snprintf(room_path, sizeof(room_path), "/home/mken/SISOPraktikum/DiscordIT/DiscorIT/%s", Lokasi);
-                            list_directory(room_path, result);
+                        if (strlen(room) > 0) {
+                            char channel_path[2098];
+                            snprintf(channel_path, sizeof(channel_path), "/home/mken/SISOPraktikum/DiscordIT/DiscorIT/%s", room);
+                            list_directory(channel_path, result);
                             send(new_socket, result, strlen(result), 0);
-                        } 
-                        else {
+                        } else {
                             snprintf(result, sizeof(result), "You must join a channel first");
                             send(new_socket, result, strlen(result), 0);
                         }
-                    } 
-                    else if (strncmp(jenis, "JOIN ", 5) == 0) {
-                        sscanf(jenis, "JOIN %s", Lokasi);
-                        char channel_path[1070];
-                        snprintf(channel_path, sizeof(channel_path), "/home/mken/SISOPraktikum/DiscordIT/DiscorIT/%s", Lokasi);
+                    }
 
-                        if (directory_exists(channel_path)) {
-                            channels = 1;
-                            snprintf(result, sizeof(result), "JOINED %s", Lokasi);
+                    else if (strncmp(jenis, "CREATE ", 7) == 0) {
+                        if(strlen(room) == 0){
+                            char channel_name[256];
+                            char channel_key[256];
+
+                            char *name_start = strchr(jenis, ' ') + 1;
+                            char *name_end = strstr(name_start, " -p ");
+
+                        if (name_end == NULL) {
+                            snprintf(result, sizeof(result), "Salah Format");
+                            send(new_socket, result, strlen(result), 0);
+                            continue;
+                        }
+
+                        int name_length = name_end - name_start;
+                        strncpy(channel_name, name_start, name_length);
+                        channel_name[name_length] = '\0';
+
+                        char *password_start = name_end + 4;
+                        strncpy(channel_key, password_start, sizeof(channel_key) - 1);
+                        channel_key[sizeof(channel_key) - 1] = '\0';
+
+                        create_channel(channel_name, channel_key, nama);
+                        snprintf(result, sizeof(result), "Channel %s created successfully", channel_name);
+                        send(new_socket, result, strlen(result), 0);
+                        }
+
+                        else if (strlen(Lokasi) == 0) {
+                            char room_path[3000];
+                            char room_name[1060];
+                            sscanf(jenis + 7, "%s", room_name);
+                            create_room(room, room_name);
+                            snprintf(result, sizeof(result), "Room %s created successfully", room_name);
+                            send(new_socket, result, strlen(result), 0);
                         } 
+                    }
+
+                    else if (strncmp(jenis, "JOIN ", 5) == 0) {
+                        char join_target[256];
+                        sscanf(jenis + 5, "%s", join_target);
+
+                        if (strlen(room) == 0) {
+                            char channel_path[1068];
+                            snprintf(channel_path, sizeof(channel_path), "/home/mken/SISOPraktikum/DiscordIT/DiscorIT/%s", join_target);
+
+                            if (directory_exists(channel_path)) {
+                                snprintf(room, sizeof(room), "%s", join_target);
+                                bzero(Lokasi, sizeof(Lokasi));
+                                snprintf(result, sizeof(result), "JOINED CHANNEL %s", join_target);
+                            } else {
+                                snprintf(result, sizeof(result), "Channel %s does not exist", join_target);
+                            }
+                        } 
+                       
+                        else if (strlen(Lokasi) == 0) {
+                            char room_path[3000];
+                            snprintf(room_path, sizeof(room_path), "/home/mken/SISOPraktikum/DiscordIT/DiscorIT/%s/%s", room, join_target);
+
+                            if (directory_exists(room_path)) {
+                                snprintf(Lokasi, sizeof(Lokasi), "%s", join_target);
+                                snprintf(result, sizeof(result), "JOINED ROOM %s", join_target);
+                            } else {
+                                snprintf(result, sizeof(result), "Nothing's Called %s here", room);
+                            }
+                        } 
+
                         else {
-                            snprintf(result, sizeof(result), "Channel %s does not exist", Lokasi);
+                            snprintf(result, sizeof(result), "You are already in a room. Type EXIT to leave the current room first.");
                         }
 
                         send(new_socket, result, strlen(result), 0);
-                    } 
+                    }   
+
                     else if (strcmp(jenis, "EXIT") == 0) {
                         if (strlen(Lokasi) > 0) {
                             bzero(Lokasi, sizeof(Lokasi));
+                            snprintf(result, sizeof(result), "Exited room, back to channel state");
+                        } 
+                        else if (strlen(room) > 0) {
+                            bzero(room, sizeof(room));
                             snprintf(result, sizeof(result), "Exited channel, back to user state");
                         } 
                         else {
                             snprintf(result, sizeof(result), "Exited user state");
                             send(new_socket, result, strlen(result), 0);
-                            break;
+                            return 0;
                         }
                         send(new_socket, result, strlen(result), 0);
                     } 
                     else {
-                        snprintf(result, sizeof(result), "Unknown command: %s\n", jenis);
+                        snprintf(result, sizeof(result), "Unknown command: %s", jenis);
                         send(new_socket, result, strlen(result), 0);
                     }
                 }
