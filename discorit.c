@@ -17,6 +17,7 @@ int main(int argc, char *argv[]) {
     char *Insert2 = argv[4];
     char Input[1024];
     char Lokasi[1024] = "";
+    char room[1024] = "";
 
     int sock = 0;
     struct sockaddr_in serv_addr;
@@ -47,6 +48,12 @@ int main(int argc, char *argv[]) {
     }
     fclose(file_ptr);
 
+    FILE* channel_ptr = fopen("/home/mken/SISOPraktikum/DiscordIT/DiscorIT/channels.csv", "r");
+    if (channel_ptr == NULL) {
+        channel_ptr = fopen("/home/mken/SISOPraktikum/DiscordIT/DiscorIT/channels.csv", "w");
+    }
+    fclose(channel_ptr);
+
     snprintf(buffer, sizeof(buffer), "%s", Jenis);
     send(sock, buffer, strlen(buffer), 0);
 
@@ -61,35 +68,59 @@ int main(int argc, char *argv[]) {
     printf("%s\n", buffer);
 
     if (strcmp(Jenis, "LOGIN") == 0) {
-        while (1) {
-            if (strlen(Lokasi) > 0) {
-                printf("[%s/%s]: ", Insert, Lokasi);
+    while (1) {
+        if (strlen(Lokasi) > 0) {
+            printf("[%s/%s/%s]: ", Insert, room, Lokasi);
+        } 
+        else if (strlen(room) > 0) {
+            printf("[%s/%s]: ", Insert, room);
+        } 
+        else {
+            printf("[%s]: ", Insert);
+        }
+        
+        fgets(Input, sizeof(Input), stdin);
+        Input[strcspn(Input, "\n")] = 0;
+        send(sock, Input, strlen(Input), 0);
+        bzero(buffer, sizeof(buffer));
+        recv(sock, buffer, sizeof(buffer), 0);
+
+        if (strncmp(Input, "JOIN ", 5) == 0) {
+            if (strlen(room) == 0) {
+                sscanf(buffer, "JOINED CHANNEL %s", room);
             } 
             else {
-                printf("[%s]: ", Insert);
+                sscanf(buffer, "JOINED ROOM %s", Lokasi);
             }
-            
-            fgets(Input, sizeof(Input), stdin);
-            Input[strcspn(Input, "\n")] = 0;
+        } 
 
+        else if (strncmp(Input, "CREATE ", 7) == 0) {
             send(sock, Input, strlen(Input), 0);
             bzero(buffer, sizeof(buffer));
             recv(sock, buffer, sizeof(buffer), 0);
             printf("%s\n", buffer);
+        }
 
-            if (strncmp(Input, "JOIN ", 5) == 0) {
-                sscanf(buffer, "JOINED %s", Lokasi);
+        else if (strcmp(Input, "EXIT") == 0) {
+            if (strlen(Lokasi) > 0) {
+                Lokasi[0] = '\0'; 
             } 
-            else if (strcmp(Input, "EXIT") == 0) {
-                if (strlen(Lokasi) > 0) {
-                    Lokasi[0] = '\0'; 
-                } 
-                else {
-                    break;
-                }
+            else if (strlen(room) > 0) {
+                room[0] = '\0';
+            } 
+            else {
+                break;
             }
+        } 
+        
+        else {
+            send(sock, Input, strlen(Input), 0);
+            bzero(buffer, sizeof(buffer));
+            recv(sock, buffer, sizeof(buffer), 0);
+            printf("%s\n", buffer);
         }
     }
+}
 
     close(sock);
     return 0;
