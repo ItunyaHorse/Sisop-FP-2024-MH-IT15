@@ -1,5 +1,6 @@
 #  Sisop-FP-2024-MH-IT15 
 
+## Dikerjakan oleh Michael Kenneth Salim 5027231008
 ```
 #include <stdio.h>
 #include <stdlib.h>
