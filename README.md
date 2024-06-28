@@ -2,7 +2,8 @@
 
 #### Dikerjakan oleh Michael Kenneth Salim 5027231008
 
-##### discorit.c
+### discorit.c
+
 ```
 #include <stdio.h>
 #include <stdlib.h>
@@ -131,7 +132,6 @@ int main(int argc, char *argv[]) {
     close(sock);
     return 0;
 }
-
 ```
 
 Jadi, pertama-tama, program ini mendeklarasi beberapa konstanta dan variabel yang diperlukan, seperti PORT yang digunakan untuk menghubungkan ke server pada port 8080, IP yang merupakan alamat IP server (dalam hal ini adalah 127.0.0.1 yang merupakan localhost), dan BUFFER_SIZE untuk ukuran buffer yang digunakan dalam pengiriman dan penerimaan data.
@@ -148,7 +148,8 @@ Jika perintah yang dikirim adalah LOGIN, program akan masuk ke dalam loop utama 
 
 Program akan terus berjalan sampai pengguna memasukkan perintah EXIT ketika berada di luar room dan channel. Akhirnya, socket akan ditutup dengan menggunakan fungsi close() dan program selesai.
 
-##### server.c
+### server.c
+
 ```
 void write_channel_csv(int id_channel, const char *channel, const char *key) {
     FILE *file_ptr = fopen(CHANNEL_CSV_PATH, "a");
@@ -414,17 +415,335 @@ void handle_chat(int new_socket, const char *channel, const char *room, const ch
 3. Manajemen Pesan Chat:
 Fungsi add_chat_message menambahkan pesan baru ke dalam file chat.csv di room yang sesuai, sementara see_chat_messages membaca dan menampilkan semua pesan dari file tersebut. Fungsi edit_chat_message mengedit pesan yang sudah ada berdasarkan ID pesan, dan delete_chat_message menghapus pesan dari file chat.csv.
 
+
+```
+int main() {
+    int server_fd, new_socket;
+    struct sockaddr_in address;
+    int addrlen = sizeof(address);
+    char buffer[MAX_BUFFER_SIZE];
+
+    if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
+        perror("Socket creation failed");
+        exit(EXIT_FAILURE);
+    }
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+
+    if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
+        perror("Bind failed");
+        exit(EXIT_FAILURE);
+    }
+
+    if (listen(server_fd, 3) < 0) {
+        perror("Listen failed");
+        exit(EXIT_FAILURE);
+    } 
+    else {
+        printf("Server started, waiting for connections...\n");
+    }
+
+    daemonize();
+
+    while (1) {
+        if ((new_socket = accept(server_fd, (struct sockaddr *)&address, (socklen_t *)&addrlen)) < 0) {
+            perror("Accept failed");
+            continue;
+        }
+
+        char result[3000];
+        char nama[1024];
+        char jenis[1024];
+        char pass[1040];
+        char Lokasi[1024] = "";
+        char room[2048] = "";
+
+        terima(new_socket, buffer, jenis);
+
+        if (strcmp("REGISTER", jenis) == 0) {
+            int last_id = get_next_user_id();
+
+            terima(new_socket, buffer, nama);
+            int ada = ganda(nama);
+            if (ada == 1) {
+                snprintf(result, sizeof(result), "%s sudah terdaftar", nama);
+                send(new_socket, result, strlen(result), 0);
+                close(new_socket);
+                continue;
+            } 
+            else if (ada == 0) {
+                terima(new_socket, buffer, pass);
+                if(last_id == 1) {
+                    penuliscsv(last_id, nama, pass, "ROOT", USERS_CSV_PATH);
+                    snprintf(result, sizeof(result), "%s berhasil register", nama);
+                } 
+                else {
+                    penuliscsv(last_id, nama, pass, "ADMIN", USERS_CSV_PATH);
+                    snprintf(result, sizeof(result), "%s berhasil register", nama);
+                }
+                send(new_socket, result, strlen(result), 0);
+                close(new_socket);
+                continue;
+            }
+        } 
+        else if (strcmp("LOGIN", jenis) == 0) {
+
+            terima(new_socket, buffer, nama);
+            int ada = ganda(nama);
+            terima(new_socket, buffer, pass);
+            int passada = ganda(pass);
+
+            if (ada == 0) {
+                snprintf(result, sizeof(result), "Akun tidak ditemukan");
+            } 
+            else if (ada == 1 && passada == 0) {
+                snprintf(result, sizeof(result), "Password salah");
+            } 
+            else if (ada == 1 && passada == 1) {
+                snprintf(result, sizeof(result), "%s berhasil login", nama);
+            }
+            send(new_socket, result, strlen(result), 0);
+
+            if (ada == 1 && passada == 1) {
+                while (1) {
+                int channels = 0;
+                    terima(new_socket, buffer, jenis);
+                    printf("Received command: %s\n", jenis);
+
+                    if (strcmp(jenis, "LIST CHANNEL") == 0) {
+                        list_directory("/home/mken/SISOPraktikum/DiscordIT/DiscorIT", result);
+                        send(new_socket, result, strlen(result), 0);
+                    } 
+
+                    else if (strcmp(jenis, "LIST ROOM") == 0) {
+                        if (strlen(room) > 0) {
+                            char channel_path[2098];
+                            snprintf(channel_path, sizeof(channel_path), "/home/mken/SISOPraktikum/DiscordIT/DiscorIT/%s", room);
+                            list_directory(channel_path, result);
+                            send(new_socket, result, strlen(result), 0);
+                        } else {
+                            snprintf(result, sizeof(result), "You must join a channel first");
+                            send(new_socket, result, strlen(result), 0);
+                        }
+                    }
+
+                    else if (strncmp(jenis, "CREATE CHANNEL ", 15) == 0) {
+                        char channel_name[256];
+                    char channel_key[256];
+
+                    char *name_start = strchr(jenis, ' ') + 1;
+                    char *name_end = strstr(name_start, " -k ");
+
+                    if (name_end == NULL) {
+                        snprintf(result, sizeof(result), "Salah Format");
+                        send(new_socket, result, strlen(result), 0);
+                        continue;
+                    }
+
+                    int name_length = name_end - name_start;
+                    strncpy(channel_name, name_start, name_length);
+                    channel_name[name_length] = '\0';
+
+                    char *password_start = name_end + 4;
+                    strncpy(channel_key, password_start, sizeof(channel_key) - 1);
+                    channel_key[sizeof(channel_key) - 1] = '\0';
+
+                    create_channel(channel_name, channel_key, nama);
+                    snprintf(result, sizeof(result), "Channel %s created successfully", channel_name);
+                    send(new_socket, result, strlen(result), 0);
+                    } 
+                    
+                    else if (strncmp(jenis, "CREATE ROOM ", 12) == 0) {
+                    if (strlen(room) == 0) {
+                        snprintf(result, sizeof(result), "You must join a channel first");
+                        send(new_socket, result, strlen(result), 0);
+                    } 
+                    
+                    else {
+                        char room_name[1060];
+                        sscanf(jenis + 12, "%s", room_name);
+                        create_room(room, room_name);
+                        snprintf(result, sizeof(result), "Room %s created successfully", room_name);
+                        send(new_socket, result, strlen(result), 0);
+                    }
+                    }
+
+                    else if (strncmp(jenis, "JOIN ", 5) == 0) {
+                        char join_target[256];
+                        sscanf(jenis + 5, "%s", join_target);
+
+                        if (strlen(room) == 0) {
+                            char channel_path[1068];
+                            snprintf(channel_path, sizeof(channel_path), "/home/mken/SISOPraktikum/DiscordIT/DiscorIT/%s", join_target);
+
+                            if (directory_exists(channel_path)) {
+                                snprintf(room, sizeof(room), "%s", join_target);
+                                bzero(Lokasi, sizeof(Lokasi));
+                                snprintf(result, sizeof(result), "JOINED CHANNEL %s", join_target);
+                            } 
+                            
+                            else {
+                                snprintf(result, sizeof(result), "Channel %s does not exist", join_target);
+                            }
+                        } 
+                       
+                        else if (strlen(Lokasi) == 0) {
+                            char room_path[3000];
+                            snprintf(room_path, sizeof(room_path), "/home/mken/SISOPraktikum/DiscordIT/DiscorIT/%s/%s", room, join_target);
+
+                            if (directory_exists(room_path)) {
+                                snprintf(Lokasi, sizeof(Lokasi), "%s", join_target);
+                                snprintf(result, sizeof(result), "JOINED ROOM %s", join_target);
+                            } 
+                            
+                            else {
+                                snprintf(result, sizeof(result), "Nothing's Called %s here", room);
+                            }
+                        } 
+
+                        else {
+                            snprintf(result, sizeof(result), "You are already in a room. Type EXIT to leave the current room first.");
+                        }
+
+                        send(new_socket, result, strlen(result), 0);
+                    }
+
+                    else if (strcmp(jenis, "CHAT ") == 0 || strcmp(jenis, "SEE CHAT") == 0 || strncmp(jenis, "EDIT CHAT", 9) == 0 || strncmp(jenis, "DEL CHAT", 8) == 0) {
+                            terima(new_socket, buffer, nama);
+                            char *command = strtok(buffer, " ");
+                            char *argument = strtok(NULL, "");
+
+                            handle_chat(new_socket, room, Lokasi, nama, command, argument);
+                        }
+                    else if (strcmp(jenis, "EXIT") == 0) {
+                        if (strlen(Lokasi) > 0) {
+                            bzero(Lokasi, sizeof(Lokasi));
+                            snprintf(result, sizeof(result), "Exited room, back to channel state");
+                        } 
+                        else if (strlen(room) > 0) {
+                            bzero(room, sizeof(room));
+                            snprintf(result, sizeof(result), "Exited channel, back to user state");
+                        } 
+                        else {
+                            snprintf(result, sizeof(result), "Exited user state");
+                            send(new_socket, result, strlen(result), 0);
+                            continue;
+                        }
+                        send(new_socket, result, strlen(result), 0);
+                    } 
+                    else {
+                        snprintf(result, sizeof(result), "Unknown command: %s", jenis);
+                        send(new_socket, result, strlen(result), 0);
+                    }
+                }
+            }
+        } 
+        else {
+            snprintf(result, sizeof(result), "Perintah tidak dikenal");
+            send(new_socket, result, strlen(result), 0);
+        }
+
+        close(new_socket);
+    }
+
+    close(server_fd);
+    return 0;
+}
+```
+
 4. Fungsi Utama dan Server Socket:
 Fungsi main mengatur socket server, menerima koneksi dari klien, dan menangani berbagai perintah yang diterima. Setelah socket server dibuat dan di-bind ke alamat yang sesuai, server mulai mendengarkan koneksi masuk. Server kemudian berjalan sebagai daemon, memastikan proses berjalan di latar belakang tanpa terikat ke terminal.
 
+```
+if (strcmp("REGISTER", jenis) == 0) {
+            int last_id = get_next_user_id();
+
+            terima(new_socket, buffer, nama);
+            int ada = ganda(nama);
+            if (ada == 1) {
+                snprintf(result, sizeof(result), "%s sudah terdaftar", nama);
+                send(new_socket, result, strlen(result), 0);
+                close(new_socket);
+                continue;
+            } 
+            else if (ada == 0) {
+                terima(new_socket, buffer, pass);
+                if(last_id == 1) {
+                    penuliscsv(last_id, nama, pass, "ROOT", USERS_CSV_PATH);
+                    snprintf(result, sizeof(result), "%s berhasil register", nama);
+                } 
+                else {
+                    penuliscsv(last_id, nama, pass, "ADMIN", USERS_CSV_PATH);
+                    snprintf(result, sizeof(result), "%s berhasil register", nama);
+                }
+                send(new_socket, result, strlen(result), 0);
+                close(new_socket);
+                continue;
+            }
+        } 
+        else if (strcmp("LOGIN", jenis) == 0) {
+
+            terima(new_socket, buffer, nama);
+            int ada = ganda(nama);
+            terima(new_socket, buffer, pass);
+            int passada = ganda(pass);
+
+            if (ada == 0) {
+                snprintf(result, sizeof(result), "Akun tidak ditemukan");
+            } 
+            else if (ada == 1 && passada == 0) {
+                snprintf(result, sizeof(result), "Password salah");
+            } 
+            else if (ada == 1 && passada == 1) {
+                snprintf(result, sizeof(result), "%s berhasil login", nama);
+            }
+            send(new_socket, result, strlen(result), 0);
+
+```
+
 5. Proses Registrasi dan Login Pengguna:
-Ketika server menerima perintah registrasi (REGISTER), ia akan memeriksa apakah username sudah ada dalam file CSV pengguna. Jika tidak ada, pengguna baru ditambahkan. Untuk login (LOGIN), server memeriksa apakah username dan password cocok dengan data dalam file CSV.
+Ketika server menerima perintah registrasi (REGISTER), ia akan memeriksa apakah username sudah ada dalam file CSV pengguna. Jika tidak ada, pengguna baru ditambahkan. Untuk login (LOGIN), server memeriksa apakah username dan password sama dengan data dalam file CSV.
+
+```
+else if (strcmp(jenis, "CHAT ") == 0 || strcmp(jenis, "SEE CHAT") == 0 || strncmp(jenis, "EDIT CHAT", 9) == 0 || strncmp(jenis, "DEL CHAT", 8) == 0) {
+                            terima(new_socket, buffer, nama);
+                            char *command = strtok(buffer, " ");
+                            char *argument = strtok(NULL, "");
+
+                            handle_chat(new_socket, room, Lokasi, nama, command, argument);
+                        }
+```
 
 6. Penanganan Perintah Chat:
 Ketika server menerima perintah terkait chat (misalnya, CHAT, SEE CHAT, EDIT CHAT, DEL CHAT), ia akan memanggil fungsi yang sesuai untuk menangani perintah tersebut, seperti menambahkan pesan, melihat semua pesan, mengedit pesan, atau menghapus pesan. Server juga dapat menerima perintah untuk membuat channel atau room baru, serta untuk bergabung ke channel atau room yang sudah ada.
 
+```
+int directory_exists(const char *path) {
+    struct stat info;
+
+    if (stat(path, &info) != 0) {
+        return 0;
+    } 
+    else if (info.st_mode & S_IFDIR) {
+        return 1;
+    } 
+    else {
+        return 0;
+    }
+}
+```
+
 7. Pengelolaan Direktori:
 Fungsi directory_exists memeriksa apakah direktori tertentu ada, dan list_directory mengembalikan daftar semua direktori (channel atau room) yang ada di dalam jalur yang diberikan.
 
-8. Helper Function dan Daemonization:
-Beberapa fungsi tambahan seperti terima digunakan untuk menerima data dari klien, dan checker memastikan file CSV ada. Fungsi daemonize memastikan server berjalan di background.
+### monitor.c
+Belum diselesaikan
+
+### Kendala
+1. Input yang tidak diterima di server.c
+2. Fitur Chat yang kurang responsif
+
+### Revisi
+1. Penyelesaian fungsi chat
