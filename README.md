@@ -155,6 +155,7 @@ Program akan terus berjalan sampai pengguna memasukkan perintah EXIT ketika bera
 
 ### server.c
 
+1. Fungsi Penulisan dan Pembacaan CSV:
 ```
 void write_channel_csv(int id_channel, const char *channel, const char *key) {
     FILE *file_ptr = fopen(CHANNEL_CSV_PATH, "a");
@@ -192,9 +193,9 @@ void penuliscsv(int lastid, const char *nama, const char *pass, const char *role
 }
 ```
 
-1. Fungsi Penulisan dan Pembacaan CSV:
 Terdapat beberapa fungsi yang berguna untuk menulis dan membaca file CSV, seperti write_channel_csv yang menulis informasi channel baru ke file CSV channel, dan get_id yang membaca file CSV untuk mendapatkan ID terakhir yang digunakan dan kemudian menambahkannya untuk mendapatkan ID baru. Fungsi penuliscsv digunakan untuk menambahkan data pengguna baru ke file CSV pengguna.
 
+2. Pembuatan Channel dan Room:
 ```
 void create_channel(const char *channel_name, const char *channel_key, const char *creator) {
     char channel_path[1024];
@@ -277,10 +278,9 @@ void create_room(const char *channel_name, const char *room_name) {
 }
 ```
 
-2. Pembuatan Channel dan Room:
 Fungsi create_channel digunakan untuk membuat direktori baru untuk channel yang baru dibuat serta menulis data channel baru ke file CSV. Fungsi ini juga membuat direktori admin di dalam channel dan file auth.csv yang berisi informasi pengguna yang membuat channel tersebut. Fungsi create_room digunakan untuk membuat direktori room di dalam channel yang sudah ada serta membuat file chat.csv di dalam room tersebut untuk menyimpan pesan-pesan chat.
 
-
+3. Manajemen Pesan Chat:
 ```
 void add_chat_message(const char *channel, const char *room, const char *username, const char *message) {
     char chat_path[3000];
@@ -417,10 +417,10 @@ void handle_chat(int new_socket, const char *channel, const char *room, const ch
     send(new_socket, result, strlen(result), 0);
 }
 ```
-3. Manajemen Pesan Chat:
+
 Fungsi add_chat_message menambahkan pesan baru ke dalam file chat.csv di room yang sesuai, sementara see_chat_messages membaca dan menampilkan semua pesan dari file tersebut. Fungsi edit_chat_message mengedit pesan yang sudah ada berdasarkan ID pesan, dan delete_chat_message menghapus pesan dari file chat.csv.
 
-
+4. Fungsi Utama dan Server Socket:
 ```
 int main() {
     int server_fd, new_socket;
@@ -658,9 +658,9 @@ int main() {
 }
 ```
 
-4. Fungsi Utama dan Server Socket:
 Fungsi main mengatur socket server, menerima koneksi dari klien, dan menangani berbagai perintah yang diterima. Setelah socket server dibuat dan di-bind ke alamat yang sesuai, server mulai mendengarkan koneksi masuk. Server kemudian berjalan sebagai daemon, memastikan proses berjalan di latar belakang tanpa terikat ke terminal.
 
+5. Proses Registrasi dan Login Pengguna:
 ```
 if (strcmp("REGISTER", jenis) == 0) {
             int last_id = get_next_user_id();
@@ -708,9 +708,9 @@ if (strcmp("REGISTER", jenis) == 0) {
 
 ```
 
-5. Proses Registrasi dan Login Pengguna:
 Ketika server menerima perintah registrasi (REGISTER), ia akan memeriksa apakah username sudah ada dalam file CSV pengguna. Jika tidak ada, pengguna baru ditambahkan. Untuk login (LOGIN), server memeriksa apakah username dan password sama dengan data dalam file CSV.
 
+6. Penanganan Perintah Chat:
 ```
 else if (strcmp(jenis, "CHAT ") == 0 || strcmp(jenis, "SEE CHAT") == 0 || strncmp(jenis, "EDIT CHAT", 9) == 0 || strncmp(jenis, "DEL CHAT", 8) == 0) {
                             terima(new_socket, buffer, nama);
@@ -721,9 +721,9 @@ else if (strcmp(jenis, "CHAT ") == 0 || strcmp(jenis, "SEE CHAT") == 0 || strncm
                         }
 ```
 
-6. Penanganan Perintah Chat:
 Ketika server menerima perintah terkait chat (misalnya, CHAT, SEE CHAT, EDIT CHAT, DEL CHAT), ia akan memanggil fungsi yang sesuai untuk menangani perintah tersebut, seperti menambahkan pesan, melihat semua pesan, mengedit pesan, atau menghapus pesan. Server juga dapat menerima perintah untuk membuat channel atau room baru, serta untuk bergabung ke channel atau room yang sudah ada.
 
+7. Pengelolaan Direktori:
 ```
 int directory_exists(const char *path) {
     struct stat info;
@@ -740,7 +740,6 @@ int directory_exists(const char *path) {
 }
 ```
 
-7. Pengelolaan Direktori:
 Fungsi directory_exists memeriksa apakah direktori tertentu ada, dan list_directory mengembalikan daftar semua direktori (channel atau room) yang ada di dalam jalur yang diberikan.
 
 ### monitor.c
@@ -749,6 +748,10 @@ Belum diselesaikan
 ### Kendala
 1. Input yang tidak diterima di server.c
 2. Fitur Chat yang kurang responsif
+![image](https://github.com/ItunyaHorse/Sisop-FP-2024-MH-IT15/assets/168651852/149d51e5-08cf-44a6-9588-1d356245b2a4)
+3. Salah library
+![image](https://github.com/ItunyaHorse/Sisop-FP-2024-MH-IT15/assets/168651852/902860b9-d979-4053-8441-2dac65577fe5)
+
 
 ### Revisi
 1. Penyelesaian fungsi chat
