@@ -132,6 +132,141 @@ void penuliscsv(int lastid, const char *nama, const char *pass, const char *role
     fclose(file_ptr);
 }
 
+void add_chat_message(const char *channel, const char *room, const char *username, const char *message) {
+    char chat_path[3000];
+    snprintf(chat_path, sizeof(chat_path), "/home/mken/SISOPraktikum/DiscordIT/DiscorIT/%s/%s/chat.csv", channel, room);
+
+    FILE *file_ptr = fopen(chat_path, "a");
+    if (file_ptr == NULL) {
+        perror("Failed to open chat.csv");
+        return;
+    }
+
+    time_t t = time(NULL);
+    struct tm *tm_info = localtime(&t);
+    char date_time[20];
+    strftime(date_time, sizeof(date_time), "%d/%m/%Y %H:%M:%S", tm_info);
+
+    int last_id = get_id(chat_path);
+    fprintf(file_ptr, "%s,%d,%s,%s\n", date_time, last_id, username, message);
+    fclose(file_ptr);
+
+    printf("Message added to chat: %s\n", message);
+}
+
+void see_chat_messages(const char *channel, const char *room) {
+    char chat_path[3000];
+    snprintf(chat_path, sizeof(chat_path), "/home/mken/SISOPraktikum/DiscordIT/DiscorIT/%s/%s/chat.csv", channel, room);
+
+    FILE *file_ptr = fopen(chat_path, "r");
+    if (file_ptr == NULL) {
+        perror("Failed to open chat.csv");
+        return;
+    }
+
+    char line[3000];
+    while (fgets(line, sizeof(line), file_ptr)) {
+        char date_time[20], username[256], message[256];
+        int id;
+        sscanf(line, "%19[^,],%d,%255[^,],%[^\n]", date_time, &id, username, message);
+        printf("[%s] [%d] [%s] %s\n", date_time, id, username, message);
+    }
+    fclose(file_ptr);
+}
+
+void edit_chat_message(const char *channel, const char *room, int message_id, const char *new_message) {
+    char chat_path[3000], temp_path[3000];
+    snprintf(chat_path, sizeof(chat_path), "/home/mken/SISOPraktikum/DiscordIT/DiscorIT/%s/%s/chat.csv", channel, room);
+    snprintf(temp_path, sizeof(temp_path), "%s", chat_path);
+
+    FILE *file_ptr = fopen(chat_path, "r");
+    FILE *temp_file_ptr = fopen(temp_path, "w");
+
+    if (file_ptr == NULL || temp_file_ptr == NULL) {
+        perror("Failed to open chat files");
+        return;
+    }
+
+    char line[2048];
+    while (fgets(line, sizeof(line), file_ptr)) {
+        char date_time[20], username[256], message[256];
+        int id;
+        sscanf(line, "%19[^,],%d,%255[^,],%[^\n]", date_time, &id, username, message);
+
+        if (id == message_id) {
+            fprintf(temp_file_ptr, "%s,%d,%s,%s\n", date_time, id, username, new_message);
+        } else {
+            fprintf(temp_file_ptr, "%s,%d,%s,%s\n", date_time, id, username, message);
+        }
+    }
+
+    fclose(file_ptr);
+    fclose(temp_file_ptr);
+
+    remove(chat_path);
+    rename(temp_path, chat_path);
+    printf("Message %d edited to: %s\n", message_id, new_message);
+}
+
+void delete_chat_message(const char *channel, const char *room, int message_id) {
+    char chat_path[3000], temp_path[3000];
+    snprintf(chat_path, sizeof(chat_path), "/home/mken/SISOPraktikum/DiscordIT/DiscorIT/%s/%s/chat.csv", channel, room);
+    snprintf(temp_path, sizeof(temp_path), "%s", chat_path);
+
+    FILE *file_ptr = fopen(chat_path, "r");
+    FILE *temp_file_ptr = fopen(temp_path, "w");
+
+    if (file_ptr == NULL || temp_file_ptr == NULL) {
+        perror("Failed to open chat files");
+        return;
+    }
+
+    char line[2048];
+    while (fgets(line, sizeof(line), file_ptr)) {
+        char date_time[20], username[256], message[256];
+        int id;
+        sscanf(line, "%19[^,],%d,%255[^,],%[^\n]", date_time, &id, username, message);
+
+        if (id != message_id) {
+            fprintf(temp_file_ptr, "%s,%d,%s,%s\n", date_time, id, username, message);
+        }
+    }
+
+    fclose(file_ptr);
+    fclose(temp_file_ptr);
+
+    remove(chat_path);
+    rename(temp_path, chat_path);
+    printf("Message %d deleted\n", message_id);
+}
+
+void handle_chat(int new_socket, const char *channel, const char *room, const char *username, const char *command, const char *argument) {
+    char result[MAX_BUFFER_SIZE];
+
+    if (strncmp(command, "CHAT ", 5) == 0) {
+        add_chat_message(channel, room, username, argument);
+        snprintf(result, sizeof(result), "Message sent: %s", argument);
+    } else if (strcmp(command, "SEE CHAT") == 0) {
+        see_chat_messages(channel, room);
+        snprintf(result, sizeof(result), "Chat messages displayed");
+    } else if (strncmp(command, "EDIT CHAT ", 10) == 0) {
+        int message_id;
+        char new_message[256];
+        sscanf(argument, "%d %255[^\n]", &message_id, new_message);
+        edit_chat_message(channel, room, message_id, new_message);
+        snprintf(result, sizeof(result), "Message %d edited: %s", message_id, new_message);
+    } else if (strncmp(command, "DEL CHAT ", 9) == 0) {
+        int message_id;
+        sscanf(argument, "%d", &message_id);
+        delete_chat_message(channel, room, message_id);
+        snprintf(result, sizeof(result), "Message %d deleted", message_id);
+    } else {
+        snprintf(result, sizeof(result), "Unknown chat command: %s", command);
+    }
+
+    send(new_socket, result, strlen(result), 0);
+}
+
 int get_next_user_id() {
     FILE *file_ptr = fopen(USERS_CSV_PATH, "r");
     if (file_ptr == NULL) {
@@ -378,41 +513,45 @@ int main() {
                         }
                     }
 
-                    else if (strncmp(jenis, "CREATE ", 7) == 0) {
-                        if(strlen(room) == 0){
-                            char channel_name[256];
-                            char channel_key[256];
+                    else if (strncmp(jenis, "CREATE CHANNEL ", 15) == 0) {
+                        char channel_name[256];
+                    char channel_key[256];
 
-                            char *name_start = strchr(jenis, ' ') + 1;
-                            char *name_end = strstr(name_start, " -p ");
+                    char *name_start = strchr(jenis, ' ') + 1;
+                    char *name_end = strstr(name_start, " -k ");
 
-                        if (name_end == NULL) {
-                            snprintf(result, sizeof(result), "Salah Format");
-                            send(new_socket, result, strlen(result), 0);
-                            continue;
-                        }
-
-                        int name_length = name_end - name_start;
-                        strncpy(channel_name, name_start, name_length);
-                        channel_name[name_length] = '\0';
-
-                        char *password_start = name_end + 4;
-                        strncpy(channel_key, password_start, sizeof(channel_key) - 1);
-                        channel_key[sizeof(channel_key) - 1] = '\0';
-
-                        create_channel(channel_name, channel_key, nama);
-                        snprintf(result, sizeof(result), "Channel %s created successfully", channel_name);
+                    if (name_end == NULL) {
+                        snprintf(result, sizeof(result), "Salah Format");
                         send(new_socket, result, strlen(result), 0);
-                        }
+                        continue;
+                    }
 
-                        else if (strlen(Lokasi) == 0) {
-                            char room_path[3000];
-                            char room_name[1060];
-                            sscanf(jenis + 7, "%s", room_name);
-                            create_room(room, room_name);
-                            snprintf(result, sizeof(result), "Room %s created successfully", room_name);
-                            send(new_socket, result, strlen(result), 0);
-                        } 
+                    int name_length = name_end - name_start;
+                    strncpy(channel_name, name_start, name_length);
+                    channel_name[name_length] = '\0';
+
+                    char *password_start = name_end + 4;
+                    strncpy(channel_key, password_start, sizeof(channel_key) - 1);
+                    channel_key[sizeof(channel_key) - 1] = '\0';
+
+                    create_channel(channel_name, channel_key, nama);
+                    snprintf(result, sizeof(result), "Channel %s created successfully", channel_name);
+                    send(new_socket, result, strlen(result), 0);
+                    } 
+                    
+                    else if (strncmp(jenis, "CREATE ROOM ", 12) == 0) {
+                    if (strlen(room) == 0) {
+                        snprintf(result, sizeof(result), "You must join a channel first");
+                        send(new_socket, result, strlen(result), 0);
+                    } 
+                    
+                    else {
+                        char room_name[1060];
+                        sscanf(jenis + 12, "%s", room_name);
+                        create_room(room, room_name);
+                        snprintf(result, sizeof(result), "Room %s created successfully", room_name);
+                        send(new_socket, result, strlen(result), 0);
+                    }
                     }
 
                     else if (strncmp(jenis, "JOIN ", 5) == 0) {
@@ -427,7 +566,9 @@ int main() {
                                 snprintf(room, sizeof(room), "%s", join_target);
                                 bzero(Lokasi, sizeof(Lokasi));
                                 snprintf(result, sizeof(result), "JOINED CHANNEL %s", join_target);
-                            } else {
+                            } 
+                            
+                            else {
                                 snprintf(result, sizeof(result), "Channel %s does not exist", join_target);
                             }
                         } 
@@ -439,7 +580,9 @@ int main() {
                             if (directory_exists(room_path)) {
                                 snprintf(Lokasi, sizeof(Lokasi), "%s", join_target);
                                 snprintf(result, sizeof(result), "JOINED ROOM %s", join_target);
-                            } else {
+                            } 
+                            
+                            else {
                                 snprintf(result, sizeof(result), "Nothing's Called %s here", room);
                             }
                         } 
@@ -449,8 +592,15 @@ int main() {
                         }
 
                         send(new_socket, result, strlen(result), 0);
-                    }   
+                    }
 
+                    else if (strcmp(jenis, "CHAT ") == 0 || strcmp(jenis, "SEE CHAT") == 0 || strncmp(jenis, "EDIT CHAT", 9) == 0 || strncmp(jenis, "DEL CHAT", 8) == 0) {
+                            terima(new_socket, buffer, nama);
+                            char *command = strtok(buffer, " ");
+                            char *argument = strtok(NULL, "");
+
+                            handle_chat(new_socket, room, Lokasi, nama, command, argument);
+                        }
                     else if (strcmp(jenis, "EXIT") == 0) {
                         if (strlen(Lokasi) > 0) {
                             bzero(Lokasi, sizeof(Lokasi));
@@ -463,7 +613,7 @@ int main() {
                         else {
                             snprintf(result, sizeof(result), "Exited user state");
                             send(new_socket, result, strlen(result), 0);
-                            return 0;
+                            continue;
                         }
                         send(new_socket, result, strlen(result), 0);
                     } 
