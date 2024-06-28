@@ -1,9 +1,9 @@
 #  Sisop-FP-2024-MH-IT15 
 
 Anggota:
-    1. Michael Kenneth Salim (5027231008)
-    2. Nicholas Emanuel Fade (5027231070)
-    3. Veri Rahman (5027231088)
+1. Michael Kenneth Salim (5027231008)
+2. Nicholas Emanuel Fade (5027231070)
+3. Veri Rahman (5027231088)
 
 #### Dikerjakan oleh Michael Kenneth Salim 5027231008
 
